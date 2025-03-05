@@ -76,7 +76,7 @@ The executable will be created in the `dist` folder:
 4. Select a project context file (optional)
 5. Choose your project's root folder
 6. Select relevant files from the file tree
-7. Click "Generate & Copy Prompt" to create and copy the structured prompt
+7. Click "Generate Prompt" to create and copy the structured prompt
 
 ## Project Structure
 
