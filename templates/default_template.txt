@@ -1,0 +1,18 @@
+You are an expert software developer. Please help me diagnose and fix the following defect in my codebase.
+
+I will provide:
+1. A description of the defect
+2. Project context
+3. Relevant file structure
+4. Contents of relevant files
+
+Please analyze the provided information and:
+1. Identify the root cause of the defect
+2. Suggest a solution
+3. Provide specific code changes needed to fix the issue
+
+### Expected Output
+- Clear identification of the bug
+- Proposed fix with code changes
+- Explanation of the fix and how it resolves the defect
+- Additional debugging/testing recommendations

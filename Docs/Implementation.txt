@@ -1,0 +1,44 @@
+Steps to Implement the LLM Prompt Generator
+
+1. Set Up the Project Structure
+Create a new Python project folder.
+Set up a virtual environment (venv).
+Install required dependencies:
+
+pip install pyqt6 pyperclip
+
+Define the following structure:
+
+llm_prompt_generator/
+├── main.py
+├── ui.py
+├── file_handler.py
+├── settings.json
+├── utils.py
+├── requirements.txt
+├── README.md
+
+2. Develop the GUI with PyQt6
+Implement ui.py for the main window:
+QTextEdit for defect description input.
+QPushButton for selecting the prompt template, context file, and root folder.
+QTreeWidget for displaying and selecting project files.
+QPushButton for generating and copying the prompt.
+QTextEdit to display the generated prompt.
+
+3. Implement File Handling (file_handler.py)
+Load the selected template and context files.
+Manage the directory tree for project files.
+Read and include the selected code files.
+
+4. Implement Persistent Settings (utils.py)
+Store and retrieve settings.json data:
+
+5. Implement the Prompt Generation Logic
+Assemble the final structured prompt:
+
+6. Implement Clipboard Copying
+Use pyperclip to copy the generated prompt:
+
+7. Package the Application
+Use PyInstaller to create an executable:

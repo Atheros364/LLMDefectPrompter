@@ -1,0 +1,84 @@
+# LLM Prompt Generator - Design Documentation
+
+## Overview
+The LLM Prompt Generator is a cross-platform desktop application designed to assist software developers in structuring prompts for Large Language Models (LLMs) to diagnose defects. The application simplifies the process of creating structured prompts by allowing users to input defect descriptions, select project context files, browse and select relevant code files, and generate a structured prompt that can be copied to the clipboard.
+
+## Features
+1. **Defect Description Input**: A textbox for pasting the defect description.
+2. **Prompt Template Selection**: A button to select a text file containing a predefined prompt template.
+3. **Context File Selection**: A button to select a text file containing additional project context.
+4. **Root Folder Selection**: A button to choose the base directory of the project.
+5. **Code File Selection**: A tree-based UI for selecting relevant code files from the project directory.
+6. **Prompt Generation and Clipboard Copying**: A button to generate the final structured prompt and copy it to the clipboard.
+7. **Persistent Settings**: Remembers the last used template, context file, and project root folder across sessions.
+
+## Technology Stack
+- **Programming Language**: Python
+- **GUI Framework**: PyQt6
+- **Clipboard Handling**: `pyperclip`
+- **File System Handling**: `os`, `pathlib`
+- **Persistent Storage**: JSON-based settings file
+- **Standalone Execution**: Packaged using PyInstaller for cross-platform compatibility
+
+## User Flow
+1. Open the application (previous paths for templates, context, and project folder are auto-loaded).
+2. Paste the defect description.
+3. Select the prompt template file.
+4. Select the project context file.
+5. Choose the root folder of the project.
+6. Open the file selection dialog and select relevant code files.
+7. Click "Generate & Copy Prompt" to assemble the prompt and copy it to the clipboard.
+
+## UI Components
+### Main Window
+- **Defect Description Input**: `QTextEdit` where the user pastes the defect description.
+- **Prompt Template Selection**: `QPushButton` for opening a file dialog, displaying the selected file path.
+- **Context File Selection**: `QPushButton` for opening a file dialog, displaying the selected file path.
+- **Root Folder Selection**: `QPushButton` for opening a folder selection dialog.
+- **File Selection Tree**: `QTreeWidget` displaying a directory tree where multiple files can be selected.
+- **Generate Prompt Button**: `QPushButton` that processes the inputs and copies the formatted prompt to the clipboard.
+- **Output Textbox**: `QTextEdit` displaying the generated prompt.
+
+## File and Data Handling
+### Persistent Settings
+Settings are stored in a JSON file (`settings.json`) with the following structure:
+```json
+{
+    "prompt_template": "path/to/last/used/template.txt",
+    "context_file": "path/to/last/used/context.txt",
+    "root_folder": "path/to/last/used/root_folder"
+}
+```
+### File Selection
+- **Prompt Template File**: The application loads the selected `.txt` file as a base structure for the final prompt.
+- **Context File**: Provides additional project details that will be included in the structured prompt.
+- **Code File Tree**: Displays the directory structure of the selected root folder, allowing users to select multiple files.
+
+## Prompt Structure
+The final prompt is structured as follows:
+```
+[Prompt Template Content]
+
+**Defect Description:**
+<user-input defect description>
+
+**Project Context:**
+<context file content>
+
+**Project File Structure:**
+<File paths of all code files>
+
+**File Contents:**
+[File: path/to/file1.ext]
+<contents of file1>
+
+[File: path/to/file2.ext]
+<contents of file2>
+...
+```
+This structure ensures:
+- A clear, structured input for the LLM.
+- The defect description is included for context.
+- The relevant project context is incorporated.
+- Selected files and their contents are available for analysis.
+

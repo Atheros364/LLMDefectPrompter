@@ -1,0 +1,5 @@
+{
+    "prompt_template": "S:/Projects/Programming Projects/LLMDefectPrompter/templates/default_template.txt",
+    "context_file": "",
+    "root_folder": "S:/Projects/Programming Projects/LLMDefectPrompter"
+}
