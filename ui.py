@@ -193,6 +193,32 @@ class MainWindow(QMainWindow):
                 selected_files.append(full_path)
         return selected_files
 
+    def _get_tree_structure(self, root_path, prefix=""):
+        """Generate a tree-like structure of the visible files/folders"""
+        structure = []
+
+        def add_item(item, prefix="", is_last=False):
+            item_text = item.text(0)
+            # Use the correct symbols for the tree structure
+            line = prefix + ("└── " if is_last else "├── ") + item_text
+            structure.append(line)
+
+            child_prefix = prefix + ("    " if is_last else "│   ")
+            child_count = item.childCount()
+
+            for i in range(child_count):
+                add_item(item.child(i), child_prefix, i == child_count - 1)
+
+        # Get the root item
+        root_item = self.file_tree.topLevelItem(0)
+        if root_item:
+            structure.append(root_item.text(0) + "/")
+            child_count = root_item.childCount()
+            for i in range(child_count):
+                add_item(root_item.child(i), "", i == child_count - 1)
+
+        return "\n".join(structure)
+
     def generate_prompt(self):
         # Read template
         template_content = ""
@@ -216,8 +242,8 @@ class MainWindow(QMainWindow):
 
         # Add file structure
         prompt += "**Project File Structure:**\n"
-        for file in selected_files:
-            prompt += f"{os.path.relpath(file, self.settings['root_folder']).replace(os.sep, '/')}\n"
+        prompt += self._get_tree_structure(self.settings["root_folder"])
+        prompt += "\n\n"
 
         # Add file contents
         prompt += "\n**File Contents:**\n"
