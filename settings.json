@@ -1,6 +1,6 @@
 {
     "prompt_template": "_internal/templates/default_template.txt",
-    "context_file": "",
+    "context_file": "_internal/templates/default_context.txt",
     "root_folder": "",
     "excluded_folders": [
         ".git",
