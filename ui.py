@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon
 import os
 import json
 import pyperclip
+from utils import get_resource_path
 
 
 class MainWindow(QMainWindow):
@@ -17,8 +18,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 600)
 
         # Set window icon - add this near the start of __init__
-        icon_path = os.path.join(os.path.dirname(
-            __file__), "assets", "app_icon.png")
+        icon_path = get_resource_path(os.path.join("assets", "app_icon.png"))
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -85,12 +85,16 @@ class MainWindow(QMainWindow):
         self.apply_saved_settings()
 
     def load_settings(self):
+        settings_path = get_resource_path('settings.json')
         try:
-            with open('settings.json', 'r') as f:
+            with open(settings_path, 'r') as f:
                 self.settings = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
+            # Load default template path
+            default_template = get_resource_path(
+                'templates/default_template.txt')
             self.settings = {
-                "prompt_template": "",
+                "prompt_template": default_template,
                 "context_file": "",
                 "root_folder": "",
                 "excluded_folders": [".git", "__pycache__", "node_modules", ".venv", "venv"],

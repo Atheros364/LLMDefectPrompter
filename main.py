@@ -3,14 +3,14 @@ import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from ui import MainWindow
+from utils import get_resource_path
 
 
 def main():
     app = QApplication(sys.argv)
 
-    # Set application icon
-    icon_path = os.path.join(os.path.dirname(
-        __file__), "assets", "app_icon.png")
+    # Set application icon using resource path
+    icon_path = get_resource_path(os.path.join("assets", "app_icon.png"))
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
