@@ -1,5 +1,7 @@
 {
     "prompt_template": "S:/Projects/Programming Projects/LLMDefectPrompter/templates/default_template.txt",
     "context_file": "",
-    "root_folder": "S:/Projects/Programming Projects/LLMDefectPrompter"
+    "root_folder": "S:/Projects/Programming Projects/LLMDefectPrompter",
+    "excluded_folders": [".git", "__pycache__", "node_modules", ".venv", "venv"],
+    "excluded_extensions": [".pyc", ".pyo", ".pyd", ".so", ".dll"]
 }

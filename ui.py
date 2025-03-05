@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QTreeWidget, QTreeWidgetItem,
-    QFileDialog, QLabel
+    QFileDialog, QLabel, QDialog, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtGui import QIcon
 import os
 import json
 import pyperclip
@@ -14,6 +15,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("LLM Defect Prompt Generator")
         self.setMinimumSize(800, 600)
+
+        # Set window icon - add this near the start of __init__
+        icon_path = os.path.join(os.path.dirname(
+            __file__), "assets", "app_icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         # Initialize settings
         self.settings = {}
@@ -60,10 +67,12 @@ class MainWindow(QMainWindow):
         self.file_tree.setHeaderLabel("Project Files")
         self.file_tree.setSelectionMode(
             QTreeWidget.SelectionMode.MultiSelection)
+        self.file_tree.itemSelectionChanged.connect(
+            self.on_tree_selection_changed)
         layout.addWidget(self.file_tree)
 
         # Generate button and output
-        self.generate_btn = QPushButton("Generate & Copy Prompt")
+        self.generate_btn = QPushButton("Generate Prompt")
         self.generate_btn.clicked.connect(self.generate_prompt)
         layout.addWidget(self.generate_btn)
 
@@ -83,8 +92,11 @@ class MainWindow(QMainWindow):
             self.settings = {
                 "prompt_template": "",
                 "context_file": "",
-                "root_folder": ""
+                "root_folder": "",
+                "excluded_folders": [".git", "__pycache__", "node_modules", ".venv", "venv"],
+                "excluded_extensions": [".pyc", ".pyo", ".pyd", ".so", ".dll"]
             }
+            self.save_settings()
 
     def save_settings(self):
         with open('settings.json', 'w') as f:
@@ -143,8 +155,24 @@ class MainWindow(QMainWindow):
 
     def _populate_tree_recursive(self, path, parent_item):
         try:
-            for entry in os.listdir(path):
+            entries = os.listdir(path)
+            # Sort entries so folders appear first
+            entries.sort(key=lambda x: (not os.path.isdir(
+                os.path.join(path, x)), x.lower()))
+
+            for entry in entries:
+                # Skip excluded folders
+                if entry in self.settings.get("excluded_folders", []):
+                    continue
+
                 full_path = os.path.join(path, entry)
+
+                # Skip excluded file types
+                if os.path.isfile(full_path):
+                    _, ext = os.path.splitext(entry)
+                    if ext.lower() in self.settings.get("excluded_extensions", []):
+                        continue
+
                 item = QTreeWidgetItem(parent_item, [entry])
                 if os.path.isdir(full_path):
                     self._populate_tree_recursive(full_path, item)
@@ -189,18 +217,76 @@ class MainWindow(QMainWindow):
         # Add file structure
         prompt += "**Project File Structure:**\n"
         for file in selected_files:
-            prompt += f"{os.path.relpath(file, self.settings['root_folder'])}\n"
+            prompt += f"{os.path.relpath(file, self.settings['root_folder']).replace(os.sep, '/')}\n"
 
         # Add file contents
         prompt += "\n**File Contents:**\n"
         for file in selected_files:
             try:
-                with open(file, 'r') as f:
+                with open(file, 'r', encoding="utf-8") as f:
                     content = f.read()
-                rel_path = os.path.relpath(file, self.settings['root_folder'])
-                prompt += f"\n[File: {rel_path}]\n{content}\n"
+            except UnicodeDecodeError:
+                content = "[Error: Unable to read file due to encoding issues.]"
             except Exception as e:
-                prompt += f"\n[Error reading {file}: {str(e)}]\n"
+                content = f"[Error reading file: {str(e)}]"
+
+            rel_path = os.path.relpath(file, self.settings['root_folder'])
+            prompt += f"\n[File: {rel_path}]\n{content}\n"
 
         self.output_text.setText(prompt)
-        pyperclip.copy(prompt)
+        try:
+            pyperclip.copy(prompt)
+        except pyperclip.PyperclipException:
+            self.output_text.setText(
+                prompt + "\n\n[Clipboard copy failed. Please copy manually.]")
+
+    def on_tree_selection_changed(self):
+        # Block signals temporarily to prevent recursion
+        self.file_tree.blockSignals(True)
+
+        # Get the item that triggered the change (last clicked)
+        current_item = self.file_tree.currentItem()
+        if not current_item:
+            self.file_tree.blockSignals(False)
+            return
+
+        # Handle the selection state of the current item
+        is_selected = current_item.isSelected()
+
+        # If it's a folder, handle its children
+        if current_item.childCount() > 0:
+            self._batch_select_children(current_item, is_selected)
+
+        # Update parent states only for the current branch
+        self._update_parent_chain(current_item)
+
+        self.file_tree.blockSignals(False)
+
+    def _batch_select_children(self, parent_item, select):
+        """More efficient batch selection of children"""
+        stack = [(parent_item, 0)]
+
+        while stack:
+            item, child_index = stack[-1]
+
+            if child_index >= item.childCount():
+                stack.pop()
+                continue
+
+            child = item.child(child_index)
+            # Update index for next iteration
+            stack[-1] = (item, child_index + 1)
+
+            child.setSelected(select)
+
+            if child.childCount() > 0:
+                stack.append((child, 0))
+
+    def _update_parent_chain(self, item):
+        """Update selection state of parent chain"""
+        current = item.parent()
+        while current:
+            all_selected = all(current.child(i).isSelected()
+                               for i in range(current.childCount()))
+            current.setSelected(all_selected)
+            current = current.parent()
