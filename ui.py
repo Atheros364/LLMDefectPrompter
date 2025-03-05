@@ -1,14 +1,145 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QTreeWidget, QTreeWidgetItem,
-    QFileDialog, QLabel, QDialog, QDialogButtonBox
+    QFileDialog, QLabel, QDialog, QDialogButtonBox, QProgressDialog, QFrame, QProgressBar
 )
-from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QIcon
 import os
 import json
 import pyperclip
 from utils import get_resource_path
+
+
+class TreeLoaderThread(QThread):
+    finished = pyqtSignal()
+    progress = pyqtSignal(int)
+
+    def __init__(self, root_path, tree_widget, settings):
+        super().__init__()
+        self.root_path = root_path
+        self.tree_widget = tree_widget
+        self.settings = settings
+        self.root_item = None
+
+    def run(self):
+        self.root_item = QTreeWidgetItem(
+            self.tree_widget, [os.path.basename(self.root_path)])
+        self._populate_tree_recursive(self.root_path, self.root_item)
+        self.finished.emit()
+
+    def _populate_tree_recursive(self, path, parent_item):
+        try:
+            entries = os.listdir(path)
+            entries.sort(key=lambda x: (not os.path.isdir(
+                os.path.join(path, x)), x.lower()))
+
+            for entry in entries:
+                if entry in self.settings.get("excluded_folders", []):
+                    continue
+
+                full_path = os.path.join(path, entry)
+
+                if os.path.isfile(full_path):
+                    _, ext = os.path.splitext(entry)
+                    if ext.lower() in self.settings.get("excluded_extensions", []):
+                        continue
+
+                item = QTreeWidgetItem(parent_item, [entry])
+                if os.path.isdir(full_path):
+                    self._populate_tree_recursive(full_path, item)
+        except PermissionError:
+            pass
+
+
+class LoadingOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        # Set attributes to make overlay work correctly
+        self.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        # Create a semi-transparent background
+        self.setStyleSheet("""
+            QWidget {
+                background-color: rgba(255, 255, 255, 200);
+                border: none;
+            }
+            QLabel {
+                color: #404040;
+                font-size: 14px;
+                background-color: transparent;
+                margin: 0;
+                padding: 0;
+            }
+            QProgressBar {
+                border: 2px solid #c8c8c8;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #f0f0f0;
+                margin: 0;
+                padding: 0;
+            }
+            QProgressBar::chunk {
+                background-color: #2196F3;
+                width: 20px;
+            }
+        """)
+
+        # Create a container widget for the loading content
+        self.container = QWidget(self)
+        container_layout = QVBoxLayout(self.container)
+        container_layout.setSpacing(10)  # Space between label and progress bar
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Add loading text
+        self.loading_label = QLabel("Loading file tree...", self.container)
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        container_layout.addWidget(self.loading_label)
+
+        # Add progress bar
+        self.progress_bar = QProgressBar(self.container)
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(0)  # Makes it indeterminate
+        self.progress_bar.setFixedSize(200, 20)  # Set fixed size
+        container_layout.addWidget(
+            self.progress_bar, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # Set fixed size for the container
+        self.container.setFixedSize(
+            # Width at least as wide as progress bar
+            max(200, self.loading_label.sizeHint().width()),
+            # Height = label + spacing + progress bar
+            self.loading_label.sizeHint().height() + 10 + 20
+        )
+
+        # Hide by default
+        self.hide()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Center the container in the parent widget
+        if self.parentWidget():
+            self.setGeometry(self.parentWidget().rect())
+            parent_rect = self.rect()
+            self.container.move(
+                (parent_rect.width() - self.container.width()) // 2,
+                (parent_rect.height() - self.container.height()) // 2
+            )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Keep the container centered when parent is resized
+        if self.parentWidget():
+            self.setGeometry(self.parentWidget().rect())
+            parent_rect = self.rect()
+            self.container.move(
+                (parent_rect.width() - self.container.width()) // 2,
+                (parent_rect.height() - self.container.height()) // 2
+            )
 
 
 class MainWindow(QMainWindow):
@@ -62,14 +193,31 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.root_label)
 
         # File tree
-        layout.addWidget(QLabel("Select Project Files:"))
+        self.tree_container = QWidget()
+        tree_layout = QVBoxLayout(self.tree_container)
+        tree_layout.setContentsMargins(0, 0, 0, 0)
+
+        tree_label = QLabel("Select Project Files:")
+        tree_layout.addWidget(tree_label)
+
+        # Create a widget to hold the tree and overlay
+        self.tree_widget_container = QWidget()
+        self.tree_widget_container.setLayout(QVBoxLayout())
+        self.tree_widget_container.layout().setContentsMargins(0, 0, 0, 0)
+
         self.file_tree = QTreeWidget()
         self.file_tree.setHeaderLabel("Project Files")
         self.file_tree.setSelectionMode(
             QTreeWidget.SelectionMode.MultiSelection)
         self.file_tree.itemSelectionChanged.connect(
             self.on_tree_selection_changed)
-        layout.addWidget(self.file_tree)
+        self.tree_widget_container.layout().addWidget(self.file_tree)
+
+        # Create loading overlay as child of tree_widget_container
+        self.loading_overlay = LoadingOverlay(self.tree_widget_container)
+
+        tree_layout.addWidget(self.tree_widget_container)
+        layout.addWidget(self.tree_container)
 
         # Generate button and output
         self.generate_btn = QPushButton("Generate Prompt")
@@ -114,9 +262,25 @@ class MainWindow(QMainWindow):
             self.context_label.setText(
                 f"Context: {self.settings['context_file']}")
         if self.settings.get("root_folder"):
-            self.root_label.setText(
-                f"Root Folder: {self.settings['root_folder']}")
-            self.populate_file_tree()
+            try:
+                root_path = self._normalize_wsl_path(
+                    self.settings["root_folder"])
+                # Verify the path exists
+                if os.path.exists(root_path):
+                    # Update with normalized path
+                    self.settings["root_folder"] = root_path
+                    self.root_label.setText(f"Root Folder: {root_path}")
+                    # Start loading the file tree
+                    self.populate_file_tree()
+                else:
+                    print(
+                        f"Warning: Root folder path does not exist: {root_path}")
+                    self.root_label.setText(
+                        "Root Folder: Not selected (path not found)")
+            except Exception as e:
+                print(f"Error loading root folder path: {str(e)}")
+                self.root_label.setText(
+                    "Root Folder: Not selected (error loading path)")
 
     def select_template(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -136,11 +300,38 @@ class MainWindow(QMainWindow):
             self.context_label.setText(f"Context: {file_path}")
             self.save_settings()
 
+    def _normalize_wsl_path(self, path):
+        """Convert WSL path to Windows path if needed"""
+        if not path:  # Handle empty path
+            return path
+
+        try:
+            if path.startswith("//wsl.localhost/") or path.startswith("\\\\wsl.localhost\\"):
+                # Split the path into components
+                parts = path.replace("\\", "/").split("/")
+                # Remove empty strings
+                parts = [p for p in parts if p]
+
+                if len(parts) >= 3 and parts[0] == "wsl.localhost":
+                    # Reconstruct as Windows WSL path
+                    wsl_path = f"\\\\wsl.localhost\\{parts[1]}\\{os.path.join(*parts[2:])}"
+                    normalized = wsl_path.replace("/", "\\")
+                    # Debug print
+                    print(f"Normalized WSL path: {path} -> {normalized}")
+                    return normalized
+
+            return path
+        except Exception as e:
+            print(f"Error normalizing WSL path: {str(e)}")  # Debug print
+            return path
+
     def select_root_folder(self):
         folder_path = QFileDialog.getExistingDirectory(
             self, "Select Root Folder"
         )
         if folder_path:
+            # Normalize the path if it's a WSL path
+            folder_path = self._normalize_wsl_path(folder_path)
             self.settings["root_folder"] = folder_path
             self.root_label.setText(f"Root Folder: {folder_path}")
             self.save_settings()
@@ -152,36 +343,28 @@ class MainWindow(QMainWindow):
         if not root_path:
             return
 
-        root_item = QTreeWidgetItem(
-            self.file_tree, [os.path.basename(root_path)])
-        self._populate_tree_recursive(root_path, root_item)
-        self.file_tree.expandAll()
+        # Disable generate button during loading
+        self.generate_btn.setEnabled(False)
 
-    def _populate_tree_recursive(self, path, parent_item):
-        try:
-            entries = os.listdir(path)
-            # Sort entries so folders appear first
-            entries.sort(key=lambda x: (not os.path.isdir(
-                os.path.join(path, x)), x.lower()))
+        # Show loading overlay
+        self.loading_overlay.show()
+        self.loading_overlay.raise_()  # Ensure overlay is on top
 
-            for entry in entries:
-                # Skip excluded folders
-                if entry in self.settings.get("excluded_folders", []):
-                    continue
+        # Create and start loader thread
+        self.loader_thread = TreeLoaderThread(
+            root_path, self.file_tree, self.settings)
+        self.loader_thread.finished.connect(self._on_tree_load_finished)
+        self.loader_thread.start()
 
-                full_path = os.path.join(path, entry)
+    def _on_tree_load_finished(self):
+        # Re-enable generate button
+        self.generate_btn.setEnabled(True)
 
-                # Skip excluded file types
-                if os.path.isfile(full_path):
-                    _, ext = os.path.splitext(entry)
-                    if ext.lower() in self.settings.get("excluded_extensions", []):
-                        continue
+        # Collapse all items
+        self.file_tree.collapseAll()
 
-                item = QTreeWidgetItem(parent_item, [entry])
-                if os.path.isdir(full_path):
-                    self._populate_tree_recursive(full_path, item)
-        except PermissionError:
-            pass
+        # Hide loading overlay
+        self.loading_overlay.hide()
 
     def get_selected_files(self):
         selected_files = []
@@ -191,8 +374,11 @@ class MainWindow(QMainWindow):
             while current:
                 path_parts.insert(0, current.text(0))
                 current = current.parent()
-            full_path = os.path.join(
-                self.settings["root_folder"], *path_parts[1:])
+
+            # Use the normalized root folder path
+            root_path = self._normalize_wsl_path(self.settings["root_folder"])
+            full_path = os.path.join(root_path, *path_parts[1:])
+
             if os.path.isfile(full_path):
                 selected_files.append(full_path)
         return selected_files
